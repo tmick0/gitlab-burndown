@@ -1,4 +1,4 @@
-import sys, gitlab, intervaltree, collections, datetime
+import sys, gitlab, intervaltree, collections, datetime, dateutil.parser
 
 def main(gitlab_url = None, gitlab_secret = None, project = None):
 
@@ -31,9 +31,9 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
                 close_time = note.created_at
         
         # convert times to datetime obj
-        open_time = datetime.datetime.strptime(open_time, "%Y-%m-%dT%H:%M:%SZ")
+        open_time = dateutil.parser.parse(open_time)
         if close_time is not None:
-            close_time = datetime.datetime.strptime(close_time, "%Y-%m-%dT%H:%M:%SZ")
+            close_time = dateutil.parser.parse(close_time)
         
         # add to tree    
         milestone_issues[milestone[0]].addi(open_time, close_time, None)
