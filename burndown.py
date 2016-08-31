@@ -1,4 +1,4 @@
-import sys, gitlab, intervaltree, collections, datetime, dateutil.parser
+import sys, gitlab, collections, datetime, dateutil.parser
 
 def main(gitlab_url = None, gitlab_secret = None, project = None):
 
@@ -6,7 +6,7 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project>\n" % sys.argv[0])
         return 1
     
-    milestone_issues = collections.defaultdict(intervaltree.IntervalTree)
+    milestone_issues = collections.defaultdict(lambda: collections.defaultdict(lambda: 0))
     milestone_names  = {}
     
     gl = gitlab.Gitlab(gitlab_url, gitlab_secret)
@@ -35,8 +35,9 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         if close_time is not None:
             close_time = dateutil.parser.parse(close_time)
         
-        # add to tree    
-        milestone_issues[milestone[0]].addi(open_time, close_time, None)
+        # update deltas
+        milestone_issues[milestone[0]][open_time]  += 1
+        milestone_issues[milestone[0]][close_time] -= 1
         
     return 0
 

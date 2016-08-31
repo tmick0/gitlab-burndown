@@ -1,3 +1,2 @@
-intervaltree
 python-gitlab
 python-dateutil
