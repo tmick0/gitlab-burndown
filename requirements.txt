@@ -2,3 +2,4 @@ python-gitlab
 python-dateutil
 numpy
 matplotlib
+scipy
