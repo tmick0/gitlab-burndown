@@ -5,10 +5,10 @@ import matplotlib.cm as cm
 import scipy.interpolate as interpolate
 import scipy.signal as signal
 
-def main(gitlab_url = None, gitlab_secret = None, project = None):
+def main(gitlab_url = None, gitlab_secret = None, project = None, since = None):
 
     if any([x is None for x in [gitlab_url, gitlab_secret, project]]):
-        sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project>\n" % sys.argv[0])
+        sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project> [since-date]\n" % sys.argv[0])
         return 1
     
     all_points       = set()
@@ -50,7 +50,7 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         
     # Remove 'None' point, it will break everything
     all_points -= set([None])
-
+    
     # Build x and y
     x = sorted(all_points)
     y = [
@@ -60,6 +60,29 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         for k, v in sorted(milestone_issues.items(), key=lambda x: milestone_start[x[0]])
     ]
     
+    # Restrict domain
+    if since is not None:
+        since = dateutil.parser.parse(since)
+        x = [t for t in x if t >= since]
+        y = [
+            yy[-len(x):]
+            for yy in y
+        ]
+    
+    # Filter empty series
+    labels = [
+        v
+        for i, (k, v) in enumerate(sorted(
+            milestone_names.items(), key=lambda p: milestone_start[p[0]]
+        ))
+        if any(k != 0 for k in y[i])
+    ]
+    y = [
+        yy
+        for yy in y
+        if any(k != 0 for k in yy)
+    ]
+
     # Smooth curve
     x_rel = [(t - x[0]).total_seconds() for t in x]
     xs_rel = np.linspace(x_rel[0], x_rel[-1], 250)
@@ -84,7 +107,8 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
     }
     
     # Generate plot
-    plt.stackplot(xs, *ys, labels=[v for k,v in sorted(milestone_names.items(), key=lambda p: milestone_start[p[0]])], colors=c, baseline='zero', edgecolor='none')
+    plt.figure(figsize=(10,4))
+    plt.stackplot(xs, *ys, labels=labels, colors=c, baseline='zero', edgecolor='none')
     plt.legend(loc='upper center', shadow=True, ncol=3, fontsize='12')
     plt.ylim(0, plt.ylim()[1]*1.25)
     plt.show()
