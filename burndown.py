@@ -1,4 +1,6 @@
 import sys, gitlab, collections, datetime, dateutil.parser
+import numpy as np
+import matplotlib.pyplot as plt
 
 def main(gitlab_url = None, gitlab_secret = None, project = None):
 
@@ -6,6 +8,7 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project>\n" % sys.argv[0])
         return 1
     
+    all_points       = set()
     milestone_issues = collections.defaultdict(lambda: collections.defaultdict(lambda: 0))
     milestone_names  = {}
     
@@ -38,6 +41,21 @@ def main(gitlab_url = None, gitlab_secret = None, project = None):
         # update deltas
         milestone_issues[milestone[0]][open_time]  += 1
         milestone_issues[milestone[0]][close_time] -= 1
+        all_points |= set([open_time, close_time])
+        
+    all_points -= set([None])
+        
+    x = sorted(all_points)
+    y = [
+        np.cumsum([   
+            v[t] for t in x
+        ])
+        for k, v in sorted(milestone_issues.items(), key=lambda x: milestone_names[x[0]])
+    ]
+    
+    plt.stackplot(x, *y, labels=sorted(milestone_names.values()))
+    plt.legend()
+    plt.show()
         
     return 0
 
