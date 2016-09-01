@@ -5,10 +5,10 @@ import matplotlib.cm as cm
 import scipy.interpolate as interpolate
 import scipy.signal as signal
 
-def main(gitlab_url = None, gitlab_secret = None, project = None, since = None):
+def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, output = None):
 
     if any([x is None for x in [gitlab_url, gitlab_secret, project]]):
-        sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project> [since-date]\n" % sys.argv[0])
+        sys.stderr.write("usage: python3 %s <gitlab_url> <gitlab_secret> <project> [since-date-iso-fmt] [output-file]\n" % sys.argv[0])
         return 1
     
     all_points       = set()
@@ -111,7 +111,11 @@ def main(gitlab_url = None, gitlab_secret = None, project = None, since = None):
     plt.stackplot(xs, *ys, labels=labels, colors=c, baseline='zero', edgecolor='none')
     plt.legend(loc='upper center', shadow=True, ncol=3, fontsize='12')
     plt.ylim(0, plt.ylim()[1]*1.25)
-    plt.show()
+    
+    if output is None:
+        plt.show()
+    else:
+        plt.savefig(output)
         
     return 0
 
