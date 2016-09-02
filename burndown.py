@@ -5,6 +5,9 @@ import matplotlib.cm as cm
 import scipy.interpolate as interpolate
 import scipy.signal as signal
 
+def dd_int():
+    return collections.defaultdict(int)
+
 def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, output = None):
 
     if any([x is None for x in [gitlab_url, gitlab_secret, project]]):
@@ -12,44 +15,84 @@ def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, 
         return 1
     
     all_points       = set()
-    milestone_issues = collections.defaultdict(lambda: collections.defaultdict(lambda: 0))
+    milestone_issues = collections.defaultdict(dd_int)
     milestone_names  = {}
     milestone_start  = {}
+    most_recent      = None
+    
+    cache = None
+    
+    try:
+        with open('issue_cache.pickle', 'rb') as f:
+            cache = pickle.load(f)
+        all_points = cache['all_points']
+        milestone_issues = cache['milestone_issues']
+        milestone_names = cache['milestone_names']
+        milestone_start = cache['milestone_start']
+        most_recent = max(all_points)
+    except (IOError, EOFError):
+        pass
     
     gl = gitlab.Gitlab(gitlab_url, gitlab_secret)
     proj = gl.projects.get(project)
-
-    for i in proj.issues.list(order_by='created_at', sort='asc', all=True):
     
-        # open time
-        open_time = i.created_at
-        
-        # close time
-        close_time = None
-        for note in i.notes.list(order_by='created_at', sort='asc', all=True):
-            if note.system and note.body.startswith('Status changed to closed'):
-                close_time = note.created_at
-        
-        # convert times to datetime obj
-        open_time = dateutil.parser.parse(open_time)
-        if close_time is not None:
-            close_time = dateutil.parser.parse(close_time)
+    done = False
+    page = 0
+    while not done:
     
-        # resolve milestone
-        milestone = None, 'None'
-        if i.milestone is not None:
-            milestone = i.milestone.iid, i.milestone.title
-        if not milestone[0] in milestone_names:
-            milestone_names[milestone[0]] = milestone[1]
-            milestone_start[milestone[0]] = open_time
+        issues = proj.issues.list(order_by='created_at', sort='desc', page=page, per_page=10)
+        if len(issues) == 0:
+            break
+        page += 1
         
-        # update deltas
-        milestone_issues[milestone[0]][open_time]  += 1
-        milestone_issues[milestone[0]][close_time] -= 1
-        all_points |= set([open_time, close_time])
+        print("fetched page %d" % page)
         
+        for i in issues:
+        
+            # open time
+            open_time = i.created_at
+            
+            # determine if we have caught up with the cache
+            if most_recent is not None and open_time <= most_recent:
+                done = True
+                break
+            
+            # close time
+            close_time = None
+            for note in i.notes.list(order_by='created_at', sort='asc', all=True):
+                if note.system and note.body.startswith('Status changed to closed'):
+                    close_time = note.created_at
+            
+            # convert times to datetime obj
+            open_time = dateutil.parser.parse(open_time)
+            if close_time is not None:
+                close_time = dateutil.parser.parse(close_time)
+        
+            # resolve milestone
+            milestone = None, 'None'
+            if i.milestone is not None:
+                milestone = i.milestone.iid, i.milestone.title
+            if not milestone[0] in milestone_names:
+                milestone_names[milestone[0]] = milestone[1]
+            if milestone[0] not in milestone_start or open_time < milestone_start[milestone[0]]:
+                milestone_start[milestone[0]] = open_time
+            
+            # update deltas
+            milestone_issues[milestone[0]][open_time]  += 1
+            milestone_issues[milestone[0]][close_time] -= 1
+            all_points |= set([open_time, close_time])
+            
     # Remove 'None' point, it will break everything
     all_points -= set([None])
+    
+    # Save cache
+    with open('issue_cache.pickle', 'wb') as f:
+        cache = pickle.dump({
+            'milestone_issues': milestone_issues,
+            'all_points':       all_points,
+            'milestone_names':  milestone_names,
+            'milestone_start':  milestone_start
+        }, f)
     
     # Build x and y
     x = sorted(all_points)
