@@ -7,6 +7,28 @@ import scipy.signal as signal
 
 def dd_int():
     return collections.defaultdict(int)
+    
+# hotpatch python-gitlab until a release includes c08c913
+if gitlab.__version__ == '0.15':
+    class Gitlab (gitlab.Gitlab):
+        def _raw_list(self, path, cls, extra_attrs={}, **kwargs):
+            params = extra_attrs.copy()
+            params.update(kwargs.copy())
+            get_all_results = kwargs.get('all', False)
+            r = self._raw_get(path, **params)
+            gitlab.raise_error_from_response(r, gitlab.GitlabListError)
+            for key in ['all', 'page', 'per_page', 'sudo', 'next_url']:
+                if key in params:
+                    del params[key]
+            params['_from_api'] = True
+            results = [cls(self, item, **params) for item in r.json() if item is not None]
+            if ('next' in r.links and 'url' in r.links['next'] and get_all_results is True):
+                args = kwargs.copy()
+                args['next_url'] = r.links['next']['url']
+                results.extend(self.list(cls, **args))
+            return results
+else:
+    Gitlab = gitlab.Gitlab
 
 def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, output = None):
 
@@ -33,29 +55,22 @@ def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, 
     except (IOError, EOFError):
         pass
     
-    gl = gitlab.Gitlab(gitlab_url, gitlab_secret)
+    gl = Gitlab(gitlab_url, gitlab_secret)
     proj = gl.projects.get(project)
     
     done = False
-    page = 0
+    page = 1
     while not done:
     
-        issues = proj.issues.list(order_by='created_at', sort='desc', page=page, per_page=10)
+        issues = proj.issues.list(order_by='created_at', sort='desc', page=page, per_page=20)
         if len(issues) == 0:
             break
         page += 1
-        
-        print("fetched page %d" % page)
         
         for i in issues:
         
             # open time
             open_time = i.created_at
-            
-            # determine if we have caught up with the cache
-            if most_recent is not None and open_time <= most_recent:
-                done = True
-                break
             
             # close time
             close_time = None
@@ -67,6 +82,11 @@ def main(gitlab_url = None, gitlab_secret = None, project = None, since = None, 
             open_time = dateutil.parser.parse(open_time)
             if close_time is not None:
                 close_time = dateutil.parser.parse(close_time)
+            
+            # determine if we have caught up with the cache
+            if most_recent is not None and open_time <= most_recent:
+                done = True
+                break
         
             # resolve milestone
             milestone = None, 'None'
